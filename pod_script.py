@@ -35,10 +35,9 @@ FALLBACK_CONCEPTS = [
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
 PROMPT_TEMPLATE = (
-    "minimalist botanical line art and abstract watercolor elements representing {keyword}, "
-    "nordic interior design style, elegant neutral color palette, "
-    "high-end gallery wall art aesthetic, clean composition, "
-    "isolated on a solid warm off-white background, high resolution, sharp focus"
+    "minimalist abstract line art and organic shapes representing {keyword}, "
+    "modern contemporary fine art print, elegant neutral color palette, "
+    "clean composition, full bleed graphic, high resolution, sharp focus"
 )
 
 DECOR_TAGS = [
