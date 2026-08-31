@@ -60,7 +60,7 @@ DEFAULT_PRINT_PROVIDER_ID = _get_env_int("PRINTIFY_PRINT_PROVIDER_ID", 1)
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
     int(v) for v in variant_env.split(",")
-] if variant_env and variant_env.strip() else [17887]
+] if variant_env and variant_env.strip() else []
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
 INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 15.0
@@ -142,10 +142,6 @@ def build_prompt(keyword: str) -> str:
 # -----------------------------------------------------------------
 
 def generate_image(prompt: str) -> bytes:
-    """
-    Generate image bytes via Pollinations.ai with built-in retry logic 
-    to handle shared server traffic cleanly. Requires no API keys.
-    """
     encoded_prompt = urllib.parse.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
     
@@ -200,31 +196,49 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
     return image_id
 
 
-def fetch_variant_cost(api_key: str, shop_id: str, blueprint_id: int,
-                        print_provider_id: int, variant_ids: list) -> int:
+def fetch_valid_variants(api_key: str, blueprint_id: int, print_provider_id: int, requested_ids: list) -> tuple:
     url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
-    log("PRINTIFY_COST", f"Fetching variant cost data: {url}")
+    log("PRINTIFY_VARIANTS", f"Fetching valid variants from catalog: {url}")
     try:
         resp = requests.get(url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
-        variants = resp.json().get("variants", [])
-        costs = [v.get("cost", 0) for v in variants if v.get("id") in variant_ids]
-        if not costs:
-            log("PRINTIFY_COST", "WARNING: Defaulting base cost to 1000 (=$10.00).")
-            return 1000
-        avg_cost = int(sum(costs) / len(costs))
-        log("PRINTIFY_COST", f"Base cost for selected variants: {avg_cost} cents.")
-        return avg_cost
+        data = resp.json()
+        variants_list = data.get("variants", [])
+        
+        if not variants_list:
+            log("PRINTIFY_VARIANTS", "ERROR: No variants found in catalog response.")
+            sys.exit(1)
+
+        # Filter or pick valid IDs
+        available_ids = [v.get("id") for v in variants_list if v.get("id")]
+        
+        # If user provided specific ones, make sure they exist
+        if requested_ids:
+            valid_requested = [vid for vid in requested_ids if vid in available_ids]
+            if valid_requested:
+                # Calculate average cost for the requested subset
+                costs = [v.get("cost", 1000) for v in variants_list if v.get("id") in valid_requested]
+                avg_cost = int(sum(costs) / len(costs)) if costs else 1000
+                return valid_requested, avg_cost
+
+        # Otherwise, gracefully pick the first available variant (e.g., first size/color combo)
+        first_variant = variants_list[0]
+        chosen_id = first_variant.get("id")
+        chosen_cost = first_variant.get("cost", 1000)
+        log("PRINTIFY_VARIANTS", f"Auto-selected valid variant ID: {chosen_id} with cost {chosen_cost} cents.")
+        return [chosen_id], chosen_cost
+
     except Exception as exc:
-        log("PRINTIFY_COST", f"WARNING: Could not fetch cost ({exc}). Defaulting to 1000.")
-        return 1000
+        log("PRINTIFY_VARIANTS", f"ERROR: Failed to fetch blueprint variants: {exc}")
+        sys.exit(1)
 
 
 def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
-                    blueprint_id: int, print_provider_id: int, variant_ids: list) -> str:
+                    blueprint_id: int, print_provider_id: int, user_variant_ids: list) -> str:
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
 
-    base_cost_cents = fetch_variant_cost(api_key, shop_id, blueprint_id, print_provider_id, variant_ids)
+    # Automatically fetch valid variant IDs and their actual base cost from Printify's catalog
+    variant_ids, base_cost_cents = fetch_valid_variants(api_key, blueprint_id, print_provider_id, user_variant_ids)
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
     tags = [keyword.lower()] + EVERGREEN_TAGS
