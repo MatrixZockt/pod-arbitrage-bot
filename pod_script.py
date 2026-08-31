@@ -49,8 +49,8 @@ DECOR_TAGS = [
     "interior styling",
 ]
 
-# Verified active canvas/wall art blueprints
-ACTIVE_BLUEPRINTS = [146, 24, 617]
+# Verified active canvas blueprints
+ACTIVE_BLUEPRINTS = [1226, 900]
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
 INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 120.0
