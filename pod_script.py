@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-pod_optimized_pipeline.py
+pod_autonomous_money_machine.py
 =================================================================
-Fully Optimized High-Margin POD Pipeline:
-- Viral 2026 Organic Modern / Earthy Trend Ingestion
-- SEO-Optimized Buyer-Intent Product Titles & Tags
-- Psychological Pricing Engine (Ending in .99)
-- Multi-Size Variant Tiering & Multi-Product Expansion
+Autonomous High-Margin Print-On-Demand Money Machine:
+- Real-Time Daily Hype Ingestion (Live Google Trends RSS Parser)
+- Multi-Product Expansion (Canvas, Framed Posters, Desk Mats)
+- Multi-Size Variant Tiering with Psychological Pricing (.99)
+- SEO-Optimized Titles, Tags, and Automated Publishing
 =================================================================
 """
 
@@ -19,23 +19,17 @@ import re
 import sys
 import time
 import urllib.parse
+import xml.etree.ElementTree as ET
 
 import requests
 
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
-
-VIRAL_TREND_CONCEPTS = [
-    "organic modern terracotta arch and minimalist line art",
-    "moody moss green botanical abstract forms",
-    "warm sand and clay textured contemporary minimalism",
-    "japonandi style minimalist branch and circle",
-    "soft neutral bauhaus geometric shapes and warm beige tones"
-]
+GOOGLE_TRENDS_RSS = "https://trends.google.com/trending/rss?geo=US"
 
 PROMPT_TEMPLATE = (
-    "{keyword}, modern contemporary fine art print, "
-    "organic modern aesthetic, warm earth tones, tactile feel, "
-    "clean composition, full bleed graphic, high resolution, sharp focus"
+    "minimalist contemporary fine art print representing {keyword}, "
+    "organic modern interior design aesthetic, warm earth tones and neutral palette, "
+    "tactile feel, clean composition, full bleed graphic, high resolution, sharp focus"
 )
 
 DECOR_TAGS = [
@@ -45,10 +39,9 @@ DECOR_TAGS = [
     "minimalist aesthetic",
     "interior styling",
     "organic modern",
-    "neutral wall art"
+    "trending decor"
 ]
 
-# High-AOV product categories: Canvas (1226), Framed Posters (920), Desk Mats (617)
 TARGET_BLUEPRINTS = [1226, 920, 617]
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
@@ -78,10 +71,33 @@ def printify_headers(api_key: str) -> dict:
     }
 
 
-def fetch_decor_concept() -> str:
-    concept = random.choice(VIRAL_TREND_CONCEPTS)
-    log("TREND", f"Selected high-intent viral trend concept: '{concept}'")
-    return concept
+def fetch_daily_hype_concept() -> tuple:
+    """Scrapes real-time daily search trends to extract active consumer hype."""
+    log("TREND", "Reading live daily search trends for active consumer hype...")
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        resp = requests.get(GOOGLE_TRENDS_RSS, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            root = ET.fromstring(resp.content)
+            titles = [elem.text for elem in root.findall(".//item/title") if elem.text]
+            if titles:
+                # Pick from top active trends to synthesize a design concept
+                raw_trend = random.choice(titles[: min(10, len(titles))])
+                clean_trend = re.sub(r'[^\w\s]', '', raw_trend).strip().lower()
+                log("TREND", f"Successfully captured live market hype: '{clean_trend}'")
+                return "live_trend", clean_trend
+    except Exception as exc:
+        log("TREND", f"Live trend feed parsing warning: {exc}. Engaging high-demand fallback vector.")
+
+    # High-intent evergreen fallback if network stream fluctuates
+    fallbacks = [
+        "organic modern terracotta arch and textured clay",
+        "moody moss green atmospheric minimalist color field",
+        "warm sand and clay contemporary minimalist study"
+    ]
+    fallback_concept = random.choice(fallbacks)
+    log("TREND", f"Using high-intent fallback concept: '{fallback_concept}'")
+    return "evergreen_viral", fallback_concept
 
 
 def generate_canvas_image(keyword: str) -> bytes:
@@ -108,7 +124,7 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
     url = f"{PRINTIFY_BASE_URL}/uploads/images.json"
     payload = {"file_name": file_name, "contents": base64.b64encode(image_bytes).decode("utf-8")}
     
-    log("PRINTIFY_UPLOAD", f"Uploading master asset to Printify library...")
+    log("PRINTIFY_UPLOAD", "Uploading master asset to Printify library...")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
         log("PRINTIFY_UPLOAD", f"ERROR [{resp.status_code}]: {resp.text[:300]}")
@@ -137,7 +153,7 @@ def resolve_blueprint_config(api_key: str, blueprint_id: int) -> tuple:
         
         variants_list = v_resp.json().get("variants", [])
         if variants_list:
-            chosen_variants = variants_list[:4] # Tier up to 4 standard sizes
+            chosen_variants = variants_list[:4] # Multi-size tiering (up to 4 sizes)
             return provider_id, chosen_variants
     except Exception:
         pass
@@ -145,27 +161,25 @@ def resolve_blueprint_config(api_key: str, blueprint_id: int) -> tuple:
 
 
 def calculate_psychological_price(base_cost_cents: int) -> int:
-    """Applies target margin and adjusts price to end in psychological .99 threshold."""
+    """Calculates target margin and enforces psychological X.99 retail pricing."""
     raw_retail = base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)
     dollars = raw_retail / 100.0
-    # Round to nearest whole tier and subtract 1 cent to create X.99 pricing
     rounded_base = round(dollars)
     if rounded_base < 10:
-        rounded_base = 15  # Minimum safety floor
-    psychological_price_cents = (rounded_base * 100) - 1
-    return int(psychological_price_cents)
+        rounded_base = 15
+    return int((rounded_base * 100) - 1)
 
 
-def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyword: str, blueprint_id: int) -> str:
+def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, trend_source: str, keyword: str, blueprint_id: int) -> str:
     provider_id, variants_list = resolve_blueprint_config(api_key, blueprint_id)
     if not provider_id or not variants_list:
         log("PRODUCT", f"Skipping blueprint {blueprint_id} (unavailable on current API scope).")
         return None
 
-    # SEO Product Title mapping based on blueprint category
     bp_labels = {1226: "Gallery Wrapped Canvas", 920: "Framed Fine Art Print", 617: "Minimalist Desk Mat"}
     product_type_name = bp_labels.get(blueprint_id, "Home Decor Art Print")
-    seo_title = f"{keyword.title()} | {product_type_name} | Organic Modern Wall Art"
+    
+    seo_title = f"{keyword.title()[:45]} | {product_type_name} | Trending Aesthetic Decor"
 
     variant_payloads = []
     variant_ids = []
@@ -183,10 +197,10 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
     payload = {
         "title": seo_title,
-        "description": f"Elevate your interior styling with this museum-quality {product_type_name.lower()} featuring {keyword}. Crafted with rich tactile texture and fade-resistant print technology.",
+        "description": f"Curated museum-quality {product_type_name.lower()} inspired by live aesthetic movements ({trend_source}). Designed with contemporary interior styling principles to elevate modern spaces.",
         "blueprint_id": blueprint_id,
         "print_provider_id": provider_id,
-        "tags": keyword.split() + DECOR_TAGS,
+        "tags": keyword.split()[:5] + DECOR_TAGS,
         "variants": variant_payloads,
         "print_areas": [{
             "variant_ids": variant_ids,
@@ -203,7 +217,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
         return None
 
     product_id = resp.json().get("id")
-    log("PRODUCT", f"Successfully created optimized SEO product ID {product_id} for blueprint {blueprint_id}")
+    log("PRODUCT", f"Successfully registered high-conversion product ID {product_id} for blueprint {blueprint_id}")
     return product_id
 
 
@@ -216,22 +230,22 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting Fully Optimized Multi-Product Pipeline (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting Autonomous Hype-Driven Pipeline Execution (DRY_RUN={DRY_RUN}) ===")
     api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
-    keyword = fetch_decor_concept()
+    trend_source, keyword = fetch_daily_hype_concept()
     image_bytes = generate_canvas_image(keyword)
-    image_id = upload_image_to_printify(api_key, image_bytes, f"optimized_asset_{int(time.time())}.png")
+    image_id = upload_image_to_printify(api_key, image_bytes, f"hype_asset_{int(time.time())}.png")
     
     created_products = []
     for bp_id in TARGET_BLUEPRINTS:
-        prod_id = create_product_for_blueprint(api_key, shop_id, image_id, keyword, bp_id)
+        prod_id = create_product_for_blueprint(api_key, shop_id, image_id, trend_source, keyword, bp_id)
         if prod_id:
             publish_product(api_key, shop_id, prod_id)
             created_products.append(prod_id)
 
-    log("PIPELINE", f"=== Fully Optimized Execution Complete. Created {len(created_products)} high-conversion items. ===")
+    log("PIPELINE", f"=== Execution Complete. Published {len(created_products)} trend-adaptive items. ===")
 
 
 if __name__ == "__main__":
