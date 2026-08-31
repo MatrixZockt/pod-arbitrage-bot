@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
-pod_multiproduct_pipeline.py
+pod_optimized_pipeline.py
 =================================================================
-Multi-Product High-Margin POD Pipeline (Multi-Size & Dynamic Pricing).
+Fully Optimized High-Margin POD Pipeline:
+- Viral 2026 Organic Modern / Earthy Trend Ingestion
+- SEO-Optimized Buyer-Intent Product Titles & Tags
+- Psychological Pricing Engine (Ending in .99)
+- Multi-Size Variant Tiering & Multi-Product Expansion
 =================================================================
 """
 
@@ -20,12 +24,11 @@ import requests
 
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
-# Updated with viral 2026 interior trends to maximize buyer intent
-FALLBACK_CONCEPTS = [
+VIRAL_TREND_CONCEPTS = [
     "organic modern terracotta arch and minimalist line art",
     "moody moss green botanical abstract forms",
     "warm sand and clay textured contemporary minimalism",
-    "japonandi style minimalist minimalist branch and circle",
+    "japonandi style minimalist branch and circle",
     "soft neutral bauhaus geometric shapes and warm beige tones"
 ]
 
@@ -41,8 +44,11 @@ DECOR_TAGS = [
     "art print",
     "minimalist aesthetic",
     "interior styling",
+    "organic modern",
+    "neutral wall art"
 ]
 
+# High-AOV product categories: Canvas (1226), Framed Posters (920), Desk Mats (617)
 TARGET_BLUEPRINTS = [1226, 920, 617]
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
@@ -73,8 +79,8 @@ def printify_headers(api_key: str) -> dict:
 
 
 def fetch_decor_concept() -> str:
-    concept = random.choice(FALLBACK_CONCEPTS)
-    log("TREND", f"Selected high-intent decor concept: '{concept}'")
+    concept = random.choice(VIRAL_TREND_CONCEPTS)
+    log("TREND", f"Selected high-intent viral trend concept: '{concept}'")
     return concept
 
 
@@ -131,12 +137,23 @@ def resolve_blueprint_config(api_key: str, blueprint_id: int) -> tuple:
         
         variants_list = v_resp.json().get("variants", [])
         if variants_list:
-            # Grab up to 4 standard sizes to offer tiering
-            chosen_variants = variants_list[:4]
+            chosen_variants = variants_list[:4] # Tier up to 4 standard sizes
             return provider_id, chosen_variants
     except Exception:
         pass
     return None, []
+
+
+def calculate_psychological_price(base_cost_cents: int) -> int:
+    """Applies target margin and adjusts price to end in psychological .99 threshold."""
+    raw_retail = base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)
+    dollars = raw_retail / 100.0
+    # Round to nearest whole tier and subtract 1 cent to create X.99 pricing
+    rounded_base = round(dollars)
+    if rounded_base < 10:
+        rounded_base = 15  # Minimum safety floor
+    psychological_price_cents = (rounded_base * 100) - 1
+    return int(psychological_price_cents)
 
 
 def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyword: str, blueprint_id: int) -> str:
@@ -145,12 +162,17 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
         log("PRODUCT", f"Skipping blueprint {blueprint_id} (unavailable on current API scope).")
         return None
 
+    # SEO Product Title mapping based on blueprint category
+    bp_labels = {1226: "Gallery Wrapped Canvas", 920: "Framed Fine Art Print", 617: "Minimalist Desk Mat"}
+    product_type_name = bp_labels.get(blueprint_id, "Home Decor Art Print")
+    seo_title = f"{keyword.title()} | {product_type_name} | Organic Modern Wall Art"
+
     variant_payloads = []
     variant_ids = []
     for v in variants_list:
         vid = v.get("id")
         base_cost = v.get("cost", 1500)
-        retail_price = int(round(base_cost * (1 + INTRO_MARGIN_PERCENT / 100)))
+        retail_price = calculate_psychological_price(base_cost)
         variant_ids.append(vid)
         variant_payloads.append({
             "id": vid,
@@ -160,11 +182,11 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
 
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
     payload = {
-        "title": f"{keyword.title()} Minimalist Art Collection - Blueprint {blueprint_id}",
-        "description": f"Curated fine-art piece featuring {keyword}. Available in multiple sizes.",
+        "title": seo_title,
+        "description": f"Elevate your interior styling with this museum-quality {product_type_name.lower()} featuring {keyword}. Crafted with rich tactile texture and fade-resistant print technology.",
         "blueprint_id": blueprint_id,
         "print_provider_id": provider_id,
-        "tags": [keyword] + DECOR_TAGS,
+        "tags": keyword.split() + DECOR_TAGS,
         "variants": variant_payloads,
         "print_areas": [{
             "variant_ids": variant_ids,
@@ -181,7 +203,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
         return None
 
     product_id = resp.json().get("id")
-    log("PRODUCT", f"Successfully created multi-size product ID {product_id} for blueprint {blueprint_id}")
+    log("PRODUCT", f"Successfully created optimized SEO product ID {product_id} for blueprint {blueprint_id}")
     return product_id
 
 
@@ -194,13 +216,13 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting Multi-Size Multi-Product Pipeline Execution (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting Fully Optimized Multi-Product Pipeline (DRY_RUN={DRY_RUN}) ===")
     api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
     keyword = fetch_decor_concept()
     image_bytes = generate_canvas_image(keyword)
-    image_id = upload_image_to_printify(api_key, image_bytes, f"asset_{int(time.time())}.png")
+    image_id = upload_image_to_printify(api_key, image_bytes, f"optimized_asset_{int(time.time())}.png")
     
     created_products = []
     for bp_id in TARGET_BLUEPRINTS:
@@ -209,7 +231,7 @@ def main() -> None:
             publish_product(api_key, shop_id, prod_id)
             created_products.append(prod_id)
 
-    log("PIPELINE", f"=== Execution Complete. Created {len(created_products)} multi-size items. ===")
+    log("PIPELINE", f"=== Fully Optimized Execution Complete. Created {len(created_products)} high-conversion items. ===")
 
 
 if __name__ == "__main__":
