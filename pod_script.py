@@ -5,10 +5,10 @@ pod_script.py
 Autonomous, zero-cost Print-on-Demand (POD) arbitrage pipeline.
 
 Pipeline stages:
-    1. Zero-token trend ingestion (Google Trends RSS -> Reddit JSON fallback)
-    2. Deterministic prompt construction (hardcoded template, no LLM tokens)
+    1. Zero-token trend ingestion & sanitization
+    2. Stylized vector prompt construction (optimized for clean graphics)
     3. Keyless image generation via Pollinations.ai API with retry logic
-    4. Printify API v1 integration: upload image -> create product -> (optional publish)
+    4. Printify API v1 integration: dynamic provider discovery & product creation
     5. Verbose, timestamped logging at every step
 =================================================================
 """
@@ -18,6 +18,7 @@ import datetime
 import json
 import os
 import random
+import re
 import sys
 import time
 import urllib.parse
@@ -33,11 +34,12 @@ GOOGLE_TRENDS_RSS_URL = "https://trends.google.com/trending/rss?geo=US"
 REDDIT_FALLBACK_URL = "https://www.reddit.com/r/popular/top.json?limit=10&t=day"
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
+# Upgraded prompt template focusing on clean vector icons/mascots instead of glitchy text/crests
 PROMPT_TEMPLATE = (
-    "minimalist vector sticker design of {keyword}, "
-    "bold flat colors, thick black outline, die-cut sticker style, "
-    "centered composition, white background, no text, no watermark, "
-    "high contrast, clean simple shapes, trending on artstation"
+    "vector sticker illustration of {keyword}, "
+    "bold graphic pop art style, vibrant flat color palette, "
+    "thick clean black vector outlines, iconic character mascot design, "
+    "centered on solid white background, zero text, sharp focus"
 )
 
 EVERGREEN_TAGS = [
@@ -49,8 +51,7 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Permanent sticker blueprint ID
-DEFAULT_BLUEPRINT_ID = 1268
+DEFAULT_BLUEPRINT_ID = 600  # Die-Cut Vinyl Stickers
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
@@ -61,9 +62,6 @@ margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
 INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 15.0
 
 REQUEST_TIMEOUT = 30
-
-# Safe testing toggle: if true, creates the draft/product on Printify 
-# but skips the public publish request entirely.
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
 
 
@@ -76,10 +74,6 @@ def log(step: str, message: str) -> None:
     print(f"[{ts}] [{step}] {message}")
 
 
-# -----------------------------------------------------------------
-# ENVIRONMENT / SECRETS
-# -----------------------------------------------------------------
-
 def get_required_env(var_name: str) -> str:
     value = os.environ.get(var_name)
     if not value:
@@ -89,8 +83,15 @@ def get_required_env(var_name: str) -> str:
 
 
 # -----------------------------------------------------------------
-# STAGE 1: ZERO-TOKEN TREND INGESTION
+# STAGE 1: TREND INGESTION & SANITIZATION
 # -----------------------------------------------------------------
+
+def sanitize_keyword(raw_keyword: str) -> str:
+    """Cleans raw trends to remove punctuation, URLs, and weird symbols that break image generation."""
+    clean = re.sub(r'[^\w\s]', '', raw_keyword)
+    clean = " ".join(clean.split())
+    return clean.lower()
+
 
 def fetch_trending_keyword() -> str:
     log("TREND", f"Fetching Google Trends RSS: {GOOGLE_TRENDS_RSS_URL}")
@@ -99,8 +100,9 @@ def fetch_trending_keyword() -> str:
         if feed.entries:
             candidates = [entry.title.strip() for entry in feed.entries if entry.get("title")]
             if candidates:
-                keyword = random.choice(candidates[: min(5, len(candidates))])
-                log("TREND", f"Google Trends selected keyword: '{keyword}'")
+                raw_keyword = random.choice(candidates[: min(5, len(candidates))])
+                keyword = sanitize_keyword(raw_keyword)
+                log("TREND", f"Google Trends selected keyword: '{keyword}' (raw: '{raw_keyword}')")
                 return keyword
     except Exception as exc:
         log("TREND", f"Google Trends RSS fetch failed: {exc}. Falling back to Reddit.")
@@ -113,8 +115,9 @@ def fetch_trending_keyword() -> str:
         data = resp.json()
         posts = data.get("data", {}).get("children", [])
         titles = [p["data"]["title"].strip() for p in posts if p.get("data", {}).get("title")]
-        keyword = random.choice(titles[: min(5, len(titles))])
-        keyword = " ".join(keyword.split()[:6])
+        raw_keyword = random.choice(titles[: min(5, len(titles))])
+        raw_keyword = " ".join(raw_keyword.split()[:5])
+        keyword = sanitize_keyword(raw_keyword)
         log("TREND", f"Reddit fallback selected keyword: '{keyword}'")
         return keyword
     except Exception as exc:
@@ -123,17 +126,17 @@ def fetch_trending_keyword() -> str:
 
 
 # -----------------------------------------------------------------
-# STAGE 2: DETERMINISTIC PROMPT MAPPING
+# STAGE 2: PROMPT MAPPING
 # -----------------------------------------------------------------
 
 def build_prompt(keyword: str) -> str:
     prompt = PROMPT_TEMPLATE.format(keyword=keyword)
-    log("PROMPT", f"Constructed image prompt: {prompt}")
+    log("PROMPT", f"Constructed upgraded image prompt: {prompt}")
     return prompt
 
 
 # -----------------------------------------------------------------
-# STAGE 3: IMAGE GENERATION (POLLINATIONS.AI)
+# STAGE 3: IMAGE GENERATION
 # -----------------------------------------------------------------
 
 def generate_image(prompt: str) -> bytes:
@@ -192,10 +195,6 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
 
 
 def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
-    """
-    Dynamically discovers a valid print provider supporting the blueprint 
-    and fetches matching operational variants/base costs without hardcoding IDs.
-    """
     providers_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
     log("PRINTIFY_DISCOVERY", f"Querying supported print providers for blueprint {blueprint_id}...")
     
@@ -208,7 +207,6 @@ def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_id
             log("PRINTIFY_DISCOVERY", f"ERROR: No print providers available for blueprint ID {blueprint_id}.")
             sys.exit(1)
         
-        # Select the first available active print provider supporting this item
         print_provider_id = providers[0].get("id")
         log("PRINTIFY_DISCOVERY", f"Discovered valid print_provider_id={print_provider_id}")
         
@@ -238,7 +236,6 @@ def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_id
                 avg_cost = int(sum(costs) / len(costs)) if costs else 1000
                 return print_provider_id, valid_requested, avg_cost
 
-        # Fallback to the first available operational variant
         first_variant = variants_list[0]
         chosen_id = first_variant.get("id")
         chosen_cost = first_variant.get("cost", 1000)
@@ -259,8 +256,8 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
     )
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
-    tags = [keyword.lower()] + EVERGREEN_TAGS
-    title = f"{keyword.title()} - Minimalist Vector Sticker [DRY-RUN]"
+    tags = [keyword] + EVERGREEN_TAGS
+    title = f"{keyword.title()} - Pop Art Vector Sticker [DRY-RUN]"
     description = f"Autonomous backtest item generated for keyword: {keyword}."
 
     payload = {
@@ -319,7 +316,7 @@ def main() -> None:
     keyword = fetch_trending_keyword()
     prompt = build_prompt(keyword)
     image_bytes = generate_image(prompt)
-    file_name = f"{keyword.lower().replace(' ', '_')}_{int(time.time())}.png"
+    file_name = f"{keyword.replace(' ', '_')}_{int(time.time())}.png"
 
     image_id = upload_image_to_printify(printify_api_key, image_bytes, file_name)
     product_id = create_product(
