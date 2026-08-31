@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-pod_autonomous_money_machine_v2.py
+pod_autonomous_money_machine_v3.py
 =================================================================
-Hardened Autonomous POD Pipeline:
-- Curated Trend Parsing (Filters news/noise into interior design concepts)
-- Multi-Product Expansion & Multi-Size Pricing Engine (.99)
-- Automated SEO & Publishing
+Fixed Autonomous POD Pipeline:
+- Generates pure flat graphic art (no room mockups)
+- Smart Google Trends keyword mapping
+- Multi-product & multi-size psychological pricing (.99)
 =================================================================
 """
 
@@ -25,10 +25,11 @@ import requests
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 GOOGLE_TRENDS_RSS = "https://trends.google.com/trending/rss?geo=US"
 
+# FIXED: Strict flat graphic art prompt (removes room/interior scene generation)
 PROMPT_TEMPLATE = (
-    "minimalist contemporary fine art print representing {keyword}, "
-    "organic modern interior design aesthetic, warm earth tones and neutral palette, "
-    "tactile feel, clean composition, full bleed graphic, high resolution, sharp focus"
+    "minimalist contemporary abstract graphic art print, {keyword}, "
+    "clean composition, rich tactile texture, elegant neutral and earth tone color palette, "
+    "full bleed surface pattern, high resolution vector aesthetic"
 )
 
 DECOR_TAGS = [
@@ -36,9 +37,8 @@ DECOR_TAGS = [
     "home decor",
     "art print",
     "minimalist aesthetic",
-    "interior styling",
-    "organic modern",
-    "trending decor"
+    "abstract art",
+    "modern wall decor"
 ]
 
 TARGET_BLUEPRINTS = [1226, 920, 617]
@@ -71,8 +71,7 @@ def printify_headers(api_key: str) -> dict:
 
 
 def fetch_smart_trend_concept() -> tuple:
-    """Scrapes daily trends and intelligently maps them into high-intent decor motifs."""
-    log("TREND", "Parsing live consumer interest for aesthetic design translation...")
+    log("TREND", "Parsing live consumer interest for graphic art adaptation...")
     try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         resp = requests.get(GOOGLE_TRENDS_RSS, headers=headers, timeout=15)
@@ -83,46 +82,44 @@ def fetch_smart_trend_concept() -> tuple:
                 raw_trend = random.choice(titles[: min(15, len(titles))])
                 clean_keyword = re.sub(r'[^\w\s]', '', raw_trend).strip().lower()
                 
-                # Aesthetic translation layer: forces random news terms into high-end decor styles
-                decor_styles = [
-                    f"terracotta arch and abstract clay forms inspired by {clean_keyword}",
-                    f"moody moss green color field study influenced by {clean_keyword}",
-                    f"warm sand and minimalist geometric balance capturing {clean_keyword}",
-                    f"japonandi style minimalist line art reflecting {clean_keyword}"
+                art_styles = [
+                    f"terracotta arch and abstract clay shapes inspired by {clean_keyword}",
+                    f"moody moss green organic color block study capturing {clean_keyword}",
+                    f"warm sand and minimalist geometric balance reflecting {clean_keyword}",
+                    f"japandi style minimalist line art structure for {clean_keyword}"
                 ]
-                translated_concept = random.choice(decor_styles)
-                log("TREND", f"Successfully translated trend '{clean_keyword}' into decor concept.")
+                translated_concept = random.choice(art_styles)
+                log("TREND", f"Successfully translated trend into graphic art concept.")
                 return "smart_trend", translated_concept
     except Exception as exc:
-        log("TREND", f"Feed warning: {exc}. Engaging verified high-converting evergreen vector.")
+        log("TREND", f"Feed warning: {exc}. Engaging evergreen vector.")
 
     evergreens = [
-        "organic modern terracotta arch and textured clay",
+        "terracotta arch and textured clay abstract shapes",
         "moody moss green atmospheric minimalist color field",
-        "warm sand and clay contemporary minimalist study"
+        "warm sand and clay contemporary geometric balance"
     ]
-    concept = random.choice(evergreens)
-    return "evergreen_viral", concept
+    return "evergreen_viral", random.choice(evergreens)
 
 
 def generate_canvas_image(keyword: str) -> bytes:
     prompt = PROMPT_TEMPLATE.format(keyword=keyword)
     encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=900&nologo=true"
+    # Using square/vertical dimensions optimized for print ratios
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=1600&nologo=true"
     
-    log("IMAGE_GEN", "Requesting master fine-art asset generation...")
+    log("IMAGE_GEN", "Requesting flat graphic art asset generation...")
     for attempt in range(1, 4):
         try:
             resp = requests.get(url, timeout=90)
-            # Validating content length strictly to prevent blank image failures
             if resp.status_code == 200 and len(resp.content) > 5000:
-                log("IMAGE_GEN", f"Master asset rendered successfully ({len(resp.content)} bytes).")
+                log("IMAGE_GEN", f"Graphic asset rendered successfully ({len(resp.content)} bytes).")
                 return resp.content
         except Exception as exc:
             log("IMAGE_GEN", f"Attempt {attempt} failed: {exc}")
         time.sleep(5)
     
-    log("IMAGE_GEN", "ERROR: Image generation failed or returned blank content.")
+    log("IMAGE_GEN", "ERROR: Image generation failed.")
     sys.exit(1)
 
 
@@ -130,7 +127,7 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
     url = f"{PRINTIFY_BASE_URL}/uploads/images.json"
     payload = {"file_name": file_name, "contents": base64.b64encode(image_bytes).decode("utf-8")}
     
-    log("PRINTIFY_UPLOAD", "Uploading master asset to Printify library...")
+    log("PRINTIFY_UPLOAD", "Uploading graphic asset to Printify library...")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
         log("PRINTIFY_UPLOAD", f"ERROR [{resp.status_code}]: {resp.text[:300]}")
@@ -159,8 +156,7 @@ def resolve_blueprint_config(api_key: str, blueprint_id: int) -> tuple:
         
         variants_list = v_resp.json().get("variants", [])
         if variants_list:
-            chosen_variants = variants_list[:4]
-            return provider_id, chosen_variants
+            return provider_id, variants_list[:4]
     except Exception:
         pass
     return None, []
@@ -202,7 +198,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, tren
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
     payload = {
         "title": seo_title,
-        "description": f"Curated museum-quality {product_type_name.lower()} featuring contemporary design aesthetics. Styled to complement modern interior spaces with rich tactile depth.",
+        "description": f"Curated museum-quality {product_type_name.lower()} featuring contemporary graphic art aesthetics. Designed to fill modern interior spaces with texture and visual depth.",
         "blueprint_id": blueprint_id,
         "print_provider_id": provider_id,
         "tags": DECOR_TAGS,
@@ -222,7 +218,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, tren
         return None
 
     product_id = resp.json().get("id")
-    log("PRODUCT", f"Successfully registered high-conversion product ID {product_id} for blueprint {blueprint_id}")
+    log("PRODUCT", f"Successfully registered product ID {product_id} for blueprint {blueprint_id}")
     return product_id
 
 
@@ -235,13 +231,13 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting Hardened Autonomous Pipeline (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting Graphic Art Pipeline (DRY_RUN={DRY_RUN}) ===")
     api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
     trend_source, keyword = fetch_smart_trend_concept()
     image_bytes = generate_canvas_image(keyword)
-    image_id = upload_image_to_printify(api_key, image_bytes, f"smart_asset_{int(time.time())}.png")
+    image_id = upload_image_to_printify(api_key, image_bytes, f"graphic_art_{int(time.time())}.png")
     
     created_products = []
     for bp_id in TARGET_BLUEPRINTS:
@@ -250,7 +246,7 @@ def main() -> None:
             publish_product(api_key, shop_id, prod_id)
             created_products.append(prod_id)
 
-    log("PIPELINE", f"=== Execution Complete. Published {len(created_products)} high-conversion items. ===")
+    log("PIPELINE", f"=== Execution Complete. Published {len(created_products)} graphic art items. ===")
 
 
 if __name__ == "__main__":
