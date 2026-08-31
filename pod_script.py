@@ -49,12 +49,12 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Safe environment variable parsing with defaults
+# Safe environment variable parsing with defaults (Using 1268 for Vinyl Stickers)
 def _get_env_int(var_name: str, default: int) -> int:
     val = os.environ.get(var_name)
     return int(val) if val and val.strip() else default
 
-DEFAULT_BLUEPRINT_ID = _get_env_int("PRINTIFY_BLUEPRINT_ID", 384)
+DEFAULT_BLUEPRINT_ID = _get_env_int("PRINTIFY_BLUEPRINT_ID", 1268)
 DEFAULT_PRINT_PROVIDER_ID = _get_env_int("PRINTIFY_PRINT_PROVIDER_ID", 1)
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
@@ -209,19 +209,15 @@ def fetch_valid_variants(api_key: str, blueprint_id: int, print_provider_id: int
             log("PRINTIFY_VARIANTS", "ERROR: No variants found in catalog response.")
             sys.exit(1)
 
-        # Filter or pick valid IDs
         available_ids = [v.get("id") for v in variants_list if v.get("id")]
         
-        # If user provided specific ones, make sure they exist
         if requested_ids:
             valid_requested = [vid for vid in requested_ids if vid in available_ids]
             if valid_requested:
-                # Calculate average cost for the requested subset
                 costs = [v.get("cost", 1000) for v in variants_list if v.get("id") in valid_requested]
                 avg_cost = int(sum(costs) / len(costs)) if costs else 1000
                 return valid_requested, avg_cost
 
-        # Otherwise, gracefully pick the first available variant (e.g., first size/color combo)
         first_variant = variants_list[0]
         chosen_id = first_variant.get("id")
         chosen_cost = first_variant.get("cost", 1000)
@@ -237,7 +233,6 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
                     blueprint_id: int, print_provider_id: int, user_variant_ids: list) -> str:
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
 
-    # Automatically fetch valid variant IDs and their actual base cost from Printify's catalog
     variant_ids, base_cost_cents = fetch_valid_variants(api_key, blueprint_id, print_provider_id, user_variant_ids)
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
