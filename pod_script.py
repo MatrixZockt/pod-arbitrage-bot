@@ -2,7 +2,7 @@
 """
 pod_multiproduct_pipeline.py
 =================================================================
-Multi-Product High-Margin POD Pipeline (Canvas, Framed Posters, Desk Mats).
+Multi-Product High-Margin POD Pipeline (Multi-Size & Dynamic Pricing).
 =================================================================
 """
 
@@ -42,8 +42,6 @@ DECOR_TAGS = [
     "interior styling",
 ]
 
-# Target high-AOV product categories to expand creation pool safely
-# 1226: Canvas, 1150 / 920: Posters/Framed Prints, 617: Desk Mats
 TARGET_BLUEPRINTS = [1226, 920, 617]
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
@@ -119,44 +117,54 @@ def resolve_blueprint_config(api_key: str, blueprint_id: int) -> tuple:
     try:
         resp = requests.get(providers_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         if resp.status_code != 200:
-            return None, None, 0
+            return None, []
         providers = resp.json()
         if not providers:
-            return None, None, 0
+            return None, []
         
         provider_id = providers[0].get("id")
         variants_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{provider_id}/variants.json"
         v_resp = requests.get(variants_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         if v_resp.status_code != 200:
-            return None, None, 0
+            return None, []
         
         variants_list = v_resp.json().get("variants", [])
         if variants_list:
-            chosen = variants_list[:1]
-            variant_ids = [v.get("id") for v in chosen]
-            base_cost = chosen[0].get("cost", 1500)
-            return provider_id, variant_ids, base_cost
+            # Grab up to 4 standard sizes to offer tiering
+            chosen_variants = variants_list[:4]
+            return provider_id, chosen_variants
     except Exception:
         pass
-    return None, None, 0
+    return None, []
 
 
 def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyword: str, blueprint_id: int) -> str:
-    provider_id, variant_ids, base_cost = resolve_blueprint_config(api_key, blueprint_id)
-    if not provider_id or not variant_ids:
+    provider_id, variants_list = resolve_blueprint_config(api_key, blueprint_id)
+    if not provider_id or not variants_list:
         log("PRODUCT", f"Skipping blueprint {blueprint_id} (unavailable on current API scope).")
         return None
 
-    retail_price = int(round(base_cost * (1 + INTRO_MARGIN_PERCENT / 100)))
+    variant_payloads = []
+    variant_ids = []
+    for v in variants_list:
+        vid = v.get("id")
+        base_cost = v.get("cost", 1500)
+        retail_price = int(round(base_cost * (1 + INTRO_MARGIN_PERCENT / 100)))
+        variant_ids.append(vid)
+        variant_payloads.append({
+            "id": vid,
+            "price": retail_price,
+            "is_enabled": True
+        })
 
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
     payload = {
         "title": f"{keyword.title()} Minimalist Art Collection - Blueprint {blueprint_id}",
-        "description": f"Curated fine-art piece featuring {keyword}.",
+        "description": f"Curated fine-art piece featuring {keyword}. Available in multiple sizes.",
         "blueprint_id": blueprint_id,
         "print_provider_id": provider_id,
         "tags": [keyword] + DECOR_TAGS,
-        "variants": [{"id": vid, "price": retail_price, "is_enabled": True} for vid in variant_ids],
+        "variants": variant_payloads,
         "print_areas": [{
             "variant_ids": variant_ids,
             "placeholders": [{
@@ -172,7 +180,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, keyw
         return None
 
     product_id = resp.json().get("id")
-    log("PRODUCT", f"Successfully created product ID {product_id} for blueprint {blueprint_id}")
+    log("PRODUCT", f"Successfully created multi-size product ID {product_id} for blueprint {blueprint_id}")
     return product_id
 
 
@@ -185,7 +193,7 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting Multi-Product High-Margin Pipeline Execution (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting Multi-Size Multi-Product Pipeline Execution (DRY_RUN={DRY_RUN}) ===")
     api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
@@ -200,7 +208,7 @@ def main() -> None:
             publish_product(api_key, shop_id, prod_id)
             created_products.append(prod_id)
 
-    log("PIPELINE", f"=== Multi-Product Execution Complete. Created {len(created_products)} synced items. ===")
+    log("PIPELINE", f"=== Execution Complete. Created {len(created_products)} multi-size items. ===")
 
 
 if __name__ == "__main__":
