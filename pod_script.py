@@ -49,8 +49,8 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Hardcoded sticker blueprint (1268)
-DEFAULT_BLUEPRINT_ID = 1268
+# Corrected to 600 (Die-Cut Vinyl Stickers on Printify)
+DEFAULT_BLUEPRINT_ID = 600
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
@@ -192,7 +192,6 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
 
 
 def discover_print_provider_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
-    # 1. Dynamically find a valid print provider for this blueprint
     pp_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
     log("PRINTIFY_DISCOVERY", f"Fetching supported print providers: {pp_url}")
     try:
@@ -209,7 +208,6 @@ def discover_print_provider_and_variants(api_key: str, blueprint_id: int, reques
         log("PRINTIFY_DISCOVERY", f"ERROR: Failed to fetch print providers: {exc}")
         sys.exit(1)
 
-    # 2. Fetch variants for that provider
     v_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
     log("PRINTIFY_VARIANTS", f"Fetching valid variants from catalog: {v_url}")
     try:
