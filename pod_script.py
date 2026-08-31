@@ -49,13 +49,9 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Safe environment variable parsing with defaults (Using 1268 for Vinyl Stickers)
-def _get_env_int(var_name: str, default: int) -> int:
-    val = os.environ.get(var_name)
-    return int(val) if val and val.strip() else default
-
+# Hardcoded to 1268 (Vinyl Stickers) to permanently bypass any GitHub Secret overrides
 DEFAULT_BLUEPRINT_ID = 1268
-DEFAULT_PRINT_PROVIDER_ID = _get_env_int("PRINTIFY_PRINT_PROVIDER_ID", 1)
+DEFAULT_PRINT_PROVIDER_ID = 1
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
