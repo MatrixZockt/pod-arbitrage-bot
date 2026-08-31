@@ -49,9 +49,8 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Hardcoded to 1268 (Vinyl Stickers) to permanently bypass any GitHub Secret overrides
+# Hardcoded sticker blueprint (1268)
 DEFAULT_BLUEPRINT_ID = 1268
-DEFAULT_PRINT_PROVIDER_ID = 1
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
@@ -192,11 +191,29 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
     return image_id
 
 
-def fetch_valid_variants(api_key: str, blueprint_id: int, print_provider_id: int, requested_ids: list) -> tuple:
-    url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
-    log("PRINTIFY_VARIANTS", f"Fetching valid variants from catalog: {url}")
+def discover_print_provider_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
+    # 1. Dynamically find a valid print provider for this blueprint
+    pp_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
+    log("PRINTIFY_DISCOVERY", f"Fetching supported print providers: {pp_url}")
     try:
-        resp = requests.get(url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
+        resp = requests.get(pp_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        providers = resp.json()
+        if not providers:
+            log("PRINTIFY_DISCOVERY", "ERROR: No print providers found for blueprint.")
+            sys.exit(1)
+        
+        print_provider_id = providers[0].get("id")
+        log("PRINTIFY_DISCOVERY", f"Discovered valid print_provider_id={print_provider_id}")
+    except Exception as exc:
+        log("PRINTIFY_DISCOVERY", f"ERROR: Failed to fetch print providers: {exc}")
+        sys.exit(1)
+
+    # 2. Fetch variants for that provider
+    v_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
+    log("PRINTIFY_VARIANTS", f"Fetching valid variants from catalog: {v_url}")
+    try:
+        resp = requests.get(v_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         variants_list = data.get("variants", [])
@@ -212,13 +229,13 @@ def fetch_valid_variants(api_key: str, blueprint_id: int, print_provider_id: int
             if valid_requested:
                 costs = [v.get("cost", 1000) for v in variants_list if v.get("id") in valid_requested]
                 avg_cost = int(sum(costs) / len(costs)) if costs else 1000
-                return valid_requested, avg_cost
+                return print_provider_id, valid_requested, avg_cost
 
         first_variant = variants_list[0]
         chosen_id = first_variant.get("id")
         chosen_cost = first_variant.get("cost", 1000)
         log("PRINTIFY_VARIANTS", f"Auto-selected valid variant ID: {chosen_id} with cost {chosen_cost} cents.")
-        return [chosen_id], chosen_cost
+        return print_provider_id, [chosen_id], chosen_cost
 
     except Exception as exc:
         log("PRINTIFY_VARIANTS", f"ERROR: Failed to fetch blueprint variants: {exc}")
@@ -226,10 +243,12 @@ def fetch_valid_variants(api_key: str, blueprint_id: int, print_provider_id: int
 
 
 def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
-                    blueprint_id: int, print_provider_id: int, user_variant_ids: list) -> str:
+                    blueprint_id: int, user_variant_ids: list) -> str:
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
 
-    variant_ids, base_cost_cents = fetch_valid_variants(api_key, blueprint_id, print_provider_id, user_variant_ids)
+    print_provider_id, variant_ids, base_cost_cents = discover_print_provider_and_variants(
+        api_key, blueprint_id, user_variant_ids
+    )
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
     tags = [keyword.lower()] + EVERGREEN_TAGS
@@ -297,7 +316,7 @@ def main() -> None:
     image_id = upload_image_to_printify(printify_api_key, image_bytes, file_name)
     product_id = create_product(
         printify_api_key, shop_id, image_id, keyword,
-        DEFAULT_BLUEPRINT_ID, DEFAULT_PRINT_PROVIDER_ID, DEFAULT_VARIANT_IDS
+        DEFAULT_BLUEPRINT_ID, DEFAULT_VARIANT_IDS
     )
     publish_product(printify_api_key, shop_id, product_id)
 
