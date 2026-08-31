@@ -2,41 +2,32 @@
 """
 pod_autonomous_money_machine_v3.py
 =================================================================
-Fixed Autonomous POD Pipeline (Optimized for >50% Success Rate):
-- Generates pure flat graphic art with strict micro-niche focus
-- Front-loaded high-intent SEO titles (<40 chars)
-- 13 unique non-repeating long-tail Etsy tags
-- Smart Google Trends keyword mapping
-- Multi-product & multi-size psychological pricing (.99)
+Deterministic Clean Art Pipeline:
+- Uses stable curated design parameters instead of broken RSS text
+- Forces lifestyle room mockup to primary thumbnail position 0
+- Front-loaded high-intent SEO titles and 13 unique Etsy tags
 =================================================================
 """
 
 import base64
 import datetime
-import json
 import os
 import random
-import re
 import sys
 import time
 import urllib.parse
-import xml.etree.ElementTree as ET
-
 import requests
 
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
-GOOGLE_TRENDS_RSS = "https://trends.google.com/trending/rss?geo=US"
 
-# LOCKED MICRO-NICHE: Warm Organic Minimalism to prevent algorithm confusion
-MICRO_NICHE_MODIFIER = "warm organic minimalism, earth tone abstract shapes"
+# STABLE CURATED DESIGN PROMPTS (Bypasses broken RSS string inputs)
+CURATED_ART_CONCEPTS = [
+    "minimalist organic arch composition, neutral beige and terracotta earth tones, textured plaster background, modern contemporary wall art",
+    "scandinavian botanical line art, sage green and soft cream color block, clean aesthetic, abstract nature study",
+    "japandi style minimalist geometric balance, warm sand and charcoal strokes, wabi-sabi texture, premium art print",
+    "abstract mid-century modern shapes, muted olive green and clay color palette, soft brush stroke details"
+]
 
-PROMPT_TEMPLATE = (
-    "minimalist contemporary abstract graphic art print, {keyword}, "
-    f"{MICRO_NICHE_MODIFIER}, clean composition, rich tactile texture, "
-    "full bleed surface pattern, high resolution vector aesthetic"
-)
-
-# 13 UNIQUE, NON-REPEATING LONG-TAIL ETSY TAGS
 OPTIMIZED_ETSY_TAGS = [
     "Minimalist wall art",
     "Neutral abstract print",
@@ -82,49 +73,17 @@ def printify_headers(api_key: str) -> dict:
     }
 
 
-def fetch_smart_trend_concept() -> tuple:
-    log("TREND", "Parsing live consumer interest for graphic art adaptation...")
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        resp = requests.get(GOOGLE_TRENDS_RSS, headers=headers, timeout=15)
-        if resp.status_code == 200:
-            root = ET.fromstring(resp.content)
-            titles = [elem.text for elem in root.findall(".//item/title") if elem.text]
-            if titles:
-                raw_trend = random.choice(titles[: min(15, len(titles))])
-                clean_keyword = re.sub(r'[^\w\s]', '', raw_trend).strip().lower()
-                
-                art_styles = [
-                    f"terracotta arch and abstract clay shapes inspired by {clean_keyword}",
-                    f"moody moss green organic color block study capturing {clean_keyword}",
-                    f"warm sand and minimalist geometric balance reflecting {clean_keyword}",
-                    f"japandi style minimalist line art structure for {clean_keyword}"
-                ]
-                translated_concept = random.choice(art_styles)
-                log("TREND", "Successfully translated trend into graphic art concept.")
-                return "smart_trend", translated_concept
-    except Exception as exc:
-        log("TREND", f"Feed warning: {exc}. Engaging evergreen vector.")
-
-    evergreens = [
-        "terracotta arch and textured clay abstract shapes",
-        "moody moss green atmospheric minimalist color field",
-        "warm sand and clay contemporary geometric balance"
-    ]
-    return "evergreen_viral", random.choice(evergreens)
-
-
-def generate_canvas_image(keyword: str) -> bytes:
-    prompt = PROMPT_TEMPLATE.format(keyword=keyword)
-    encoded_prompt = urllib.parse.quote(prompt)
+def generate_canvas_image() -> bytes:
+    concept = random.choice(CURATED_ART_CONCEPTS)
+    encoded_prompt = urllib.parse.quote(concept)
     url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=1600&nologo=true"
     
-    log("IMAGE_GEN", "Requesting flat graphic art asset generation...")
+    log("IMAGE_GEN", f"Requesting clean art generation for concept: {concept[:40]}...")
     for attempt in range(1, 4):
         try:
             resp = requests.get(url, timeout=90)
             if resp.status_code == 200 and len(resp.content) > 5000:
-                log("IMAGE_GEN", f"Graphic asset rendered successfully ({len(resp.content)} bytes).")
+                log("IMAGE_GEN", f"Asset rendered successfully ({len(resp.content)} bytes).")
                 return resp.content
         except Exception as exc:
             log("IMAGE_GEN", f"Attempt {attempt} failed: {exc}")
@@ -134,18 +93,18 @@ def generate_canvas_image(keyword: str) -> bytes:
     sys.exit(1)
 
 
-def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -> str:
+def upload_image_to_printify(api_key: str, image_bytes: bytes) -> str:
     url = f"{PRINTIFY_BASE_URL}/uploads/images.json"
-    payload = {"file_name": file_name, "contents": base64.b64encode(image_bytes).decode("utf-8")}
+    payload = {"file_name": f"art_print_{int(time.time())}.png", "contents": base64.b64encode(image_bytes).decode("utf-8")}
     
-    log("PRINTIFY_UPLOAD", "Uploading graphic asset to Printify library...")
+    log("PRINTIFY_UPLOAD", "Uploading asset to Printify library...")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
         log("PRINTIFY_UPLOAD", f"ERROR [{resp.status_code}]: {resp.text[:300]}")
         sys.exit(1)
     
     image_id = resp.json().get("id")
-    log("PRINTIFY_UPLOAD", f"Upload success. Printify image_id={image_id}")
+    log("PRINTIFY_UPLOAD", f"Upload success. image_id={image_id}")
     return image_id
 
 
@@ -182,16 +141,15 @@ def calculate_psychological_price(base_cost_cents: int) -> int:
     return int((rounded_base * 100) - 1)
 
 
-def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, trend_source: str, keyword: str, blueprint_id: int) -> str:
+def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, blueprint_id: int) -> str:
     provider_id, variants_list = resolve_blueprint_config(api_key, blueprint_id)
     if not provider_id or not variants_list:
-        log("PRODUCT", f"Skipping blueprint {blueprint_id} (unavailable on current API scope).")
+        log("PRODUCT", f"Skipping blueprint {blueprint_id}.")
         return None
 
     bp_labels = {1226: "Gallery Canvas", 920: "Framed Fine Art", 617: "Minimalist Desk Mat"}
     product_type_name = bp_labels.get(blueprint_id, "Art Print")
     
-    # FRONT-LOADED HIGH-INTENT SEO TITLE (<40 characters at start)
     seo_title = f"Minimalist Wall Art, {product_type_name}, Neutral Earth Tone Canvas Print"
 
     variant_payloads = []
@@ -210,7 +168,7 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, tren
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
     payload = {
         "title": seo_title,
-        "description": f"Curated museum-quality {product_type_name.lower()} featuring contemporary graphic art aesthetics. Designed to fill modern interior spaces with texture and visual depth.",
+        "description": f"Curated museum-quality {product_type_name.lower()} featuring contemporary graphic art aesthetics.",
         "blueprint_id": blueprint_id,
         "print_provider_id": provider_id,
         "tags": OPTIMIZED_ETSY_TAGS,
@@ -226,11 +184,24 @@ def create_product_for_blueprint(api_key: str, shop_id: str, image_id: str, tren
 
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
-        log("PRODUCT", f"Warning: Failed to create product for blueprint {blueprint_id}: {resp.text[:200]}")
+        log("PRODUCT", f"Failed to create product for blueprint {blueprint_id}: {resp.text[:200]}")
         return None
 
-    product_id = resp.json().get("id")
-    log("PRODUCT", f"Successfully registered product ID {product_id} for blueprint {blueprint_id}")
+    product_data = resp.json()
+    product_id = product_data.get("id")
+    
+    # FORCE LIFESTYLE MOCKUP TO INDEX 0 (Thumbnail position)
+    product_images = product_data.get("images", [])
+    if product_images and len(product_images) > 1:
+        lifestyle_idx = next((i for i, img in enumerate(product_images) if img.get("position") != "front"), None)
+        if lifestyle_idx is not None and lifestyle_idx != 0:
+            img_to_front = product_images.pop(lifestyle_idx)
+            product_images.insert(0, img_to_front)
+            update_url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products/{product_id}.json"
+            requests.put(update_url, headers=printify_headers(api_key), json={"images": product_images}, timeout=REQUEST_TIMEOUT)
+            log("PRODUCT", f"Forced lifestyle mockup to primary thumbnail for product {product_id}")
+
+    log("PRODUCT", f"Registered product ID {product_id} for blueprint {blueprint_id}")
     return product_id
 
 
@@ -243,22 +214,21 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting Optimized Graphic Art Pipeline (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting Clean Art Pipeline (DRY_RUN={DRY_RUN}) ===")
     api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
-    trend_source, keyword = fetch_smart_trend_concept()
-    image_bytes = generate_canvas_image(keyword)
-    image_id = upload_image_to_printify(api_key, image_bytes, f"graphic_art_{int(time.time())}.png")
+    image_bytes = generate_canvas_image()
+    image_id = upload_image_to_printify(api_key, image_bytes)
     
     created_products = []
     for bp_id in TARGET_BLUEPRINTS:
-        prod_id = create_product_for_blueprint(api_key, shop_id, image_id, trend_source, keyword, bp_id)
+        prod_id = create_product_for_blueprint(api_key, shop_id, image_id, bp_id)
         if prod_id:
             publish_product(api_key, shop_id, prod_id)
             created_products.append(prod_id)
 
-    log("PIPELINE", f"=== Execution Complete. Published {len(created_products)} optimized items. ===")
+    log("PIPELINE", f"=== Complete. Published {len(created_products)} clean art items. ===")
 
 
 if __name__ == "__main__":
@@ -267,5 +237,5 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as e:
-        log("PIPELINE", f"FATAL UNHANDLED ERROR: {e}")
+        log("PIPELINE", f"FATAL ERROR: {e}")
         sys.exit(1)
