@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/init/env python3
 """
 pod_script.py
 =================================================================
@@ -6,7 +6,7 @@ Autonomous, zero-cost Print-on-Demand (POD) arbitrage pipeline.
 
 Pipeline stages:
     1. Zero-token trend ingestion & sanitization
-    2. Stylized vector prompt construction (optimized for clean graphics)
+    2. High-converting die-cut vector prompt construction
     3. Keyless image generation via Pollinations.ai API with retry logic
     4. Printify API v1 integration: dynamic provider discovery & product creation
     5. Verbose, timestamped logging at every step
@@ -34,20 +34,20 @@ GOOGLE_TRENDS_RSS_URL = "https://trends.google.com/trending/rss?geo=US"
 REDDIT_FALLBACK_URL = "https://www.reddit.com/r/popular/top.json?limit=10&t=day"
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
-# Upgraded prompt template focusing on clean vector icons/mascots instead of glitchy text/crests
+# Optimized for high-converting e-commerce: isolated sticker with a clear contour border
 PROMPT_TEMPLATE = (
-    "vector sticker illustration of {keyword}, "
-    "bold graphic pop art style, vibrant flat color palette, "
-    "thick clean black vector outlines, iconic character mascot design, "
-    "centered on solid white background, zero text, sharp focus"
+    "die-cut vinyl sticker of {keyword}, "
+    "isolated object, thick solid white border contour outline around the entire shape, "
+    "flat vector graphic style, vibrant pop culture colors, "
+    "clean vector lines, pure solid white background, zero artifacts, high contrast"
 )
 
 EVERGREEN_TAGS = [
     "sticker",
-    "gift idea",
+    "laptop decal",
     "trendy design",
-    "funny gift",
-    "aesthetic",
+    "aesthetic sticker",
+    "vinyl sticker",
     "cute sticker",
 ]
 
@@ -59,7 +59,7 @@ DEFAULT_VARIANT_IDS = [
 ] if variant_env and variant_env.strip() else []
 
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
-INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 15.0
+INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 25.0  # Optimized margin for profit scaling
 
 REQUEST_TIMEOUT = 30
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
@@ -87,7 +87,6 @@ def get_required_env(var_name: str) -> str:
 # -----------------------------------------------------------------
 
 def sanitize_keyword(raw_keyword: str) -> str:
-    """Cleans raw trends to remove punctuation, URLs, and weird symbols that break image generation."""
     clean = re.sub(r'[^\w\s]', '', raw_keyword)
     clean = " ".join(clean.split())
     return clean.lower()
@@ -116,7 +115,7 @@ def fetch_trending_keyword() -> str:
         posts = data.get("data", {}).get("children", [])
         titles = [p["data"]["title"].strip() for p in posts if p.get("data", {}).get("title")]
         raw_keyword = random.choice(titles[: min(5, len(titles))])
-        raw_keyword = " ".join(raw_keyword.split()[:5])
+        raw_keyword = " ".join(raw_keyword.split()[:4])
         keyword = sanitize_keyword(raw_keyword)
         log("TREND", f"Reddit fallback selected keyword: '{keyword}'")
         return keyword
@@ -131,7 +130,7 @@ def fetch_trending_keyword() -> str:
 
 def build_prompt(keyword: str) -> str:
     prompt = PROMPT_TEMPLATE.format(keyword=keyword)
-    log("PROMPT", f"Constructed upgraded image prompt: {prompt}")
+    log("PROMPT", f"Constructed commercial sticker prompt: {prompt}")
     return prompt
 
 
@@ -257,8 +256,8 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
     tags = [keyword] + EVERGREEN_TAGS
-    title = f"{keyword.title()} - Pop Art Vector Sticker [DRY-RUN]"
-    description = f"Autonomous backtest item generated for keyword: {keyword}."
+    title = f"{keyword.title()} Die-Cut Vinyl Sticker"
+    description = f"High-quality die-cut vinyl sticker featuring an exclusive {keyword} vector design. Durable, weather-resistant, and perfect for laptops, water bottles, and notebooks."
 
     payload = {
         "title": title,
@@ -271,7 +270,7 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
             "variant_ids": variant_ids,
             "placeholders": [{
                 "position": "front",
-                "images": [{"id": image_id, "x": 0.5, "y": 0.5, "scale": 1, "angle": 0}]
+                "images": [{"id": image_id, "x": 0.5, "y": 0.5, "scale": 0.85, "angle": 0}]
             }]
         }],
     }
