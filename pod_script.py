@@ -283,7 +283,6 @@ def main() -> None:
 
     printify_api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
-    # Note: IMAGE_GEN_API_KEY is no longer required since Pollinations is keyless!
 
     keyword = fetch_trending_keyword()
     prompt = build_prompt(keyword)
