@@ -5,7 +5,16 @@ on:
   schedule:
     - cron: "0 4 * * *"
   # Allows manual triggering from the Actions tab ("Run workflow" button)
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (true/false)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   run-pipeline:
@@ -28,13 +37,13 @@ jobs:
 
       - name: Run POD arbitrage pipeline
         env:
-          PRINTIFY_API_KEY: ${{ secrets.PRINTIFY_API_KEY }}
+          PRINTIFY_API_KEY: ${{ secrets.PRINTIFY_PRINTIFY_API_KEY || secrets.PRINTIFY_API_KEY }}
           STORE_ID: ${{ secrets.STORE_ID }}
           IMAGE_GEN_API_KEY: ${{ secrets.IMAGE_GEN_API_KEY }}
-          # Optional overrides -- uncomment and set as repo Secrets/Variables
-          # if your Printify catalog differs from the script defaults.
-          # PRINTIFY_BLUEPRINT_ID: ${{ secrets.PRINTIFY_BLUEPRINT_ID }}
-          # PRINTIFY_PRINT_PROVIDER_ID: ${{ secrets.PRINTIFY_PRINT_PROVIDER_ID }}
-          # PRINTIFY_VARIANT_IDS: ${{ secrets.PRINTIFY_VARIANT_IDS }}
-          # INTRO_MARGIN_PERCENT: ${{ secrets.INTRO_MARGIN_PERCENT }}
+          # Passes the workflow_dispatch input or defaults to true for safety
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'true' }}
+          PRINTIFY_BLUEPRINT_ID: ${{ secrets.PRINTIFY_BLUEPRINT_ID }}
+          PRINTIFY_PRINT_PROVIDER_ID: ${{ secrets.PRINTIFY_PRINT_PROVIDER_ID }}
+          PRINTIFY_VARIANT_IDS: ${{ secrets.PRINTIFY_VARIANT_IDS }}
+          INTRO_MARGIN_PERCENT: ${{ secrets.INTRO_MARGIN_PERCENT }}
         run: python pod_script.py
