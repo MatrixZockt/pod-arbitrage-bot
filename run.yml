@@ -1,0 +1,40 @@
+name: Daily POD Arbitrage Run
+
+on:
+  # Runs automatically every day at 04:00 UTC
+  schedule:
+    - cron: "0 4 * * *"
+  # Allows manual triggering from the Actions tab ("Run workflow" button)
+  workflow_dispatch: {}
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run POD arbitrage pipeline
+        env:
+          PRINTIFY_API_KEY: ${{ secrets.PRINTIFY_API_KEY }}
+          STORE_ID: ${{ secrets.STORE_ID }}
+          IMAGE_GEN_API_KEY: ${{ secrets.IMAGE_GEN_API_KEY }}
+          # Optional overrides -- uncomment and set as repo Secrets/Variables
+          # if your Printify catalog differs from the script defaults.
+          # PRINTIFY_BLUEPRINT_ID: ${{ secrets.PRINTIFY_BLUEPRINT_ID }}
+          # PRINTIFY_PRINT_PROVIDER_ID: ${{ secrets.PRINTIFY_PRINT_PROVIDER_ID }}
+          # PRINTIFY_VARIANT_IDS: ${{ secrets.PRINTIFY_VARIANT_IDS }}
+          # INTRO_MARGIN_PERCENT: ${{ secrets.INTRO_MARGIN_PERCENT }}
+        run: python pod_script.py
