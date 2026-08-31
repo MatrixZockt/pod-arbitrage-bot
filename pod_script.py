@@ -49,8 +49,8 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Corrected to 600 (Die-Cut Vinyl Stickers on Printify)
-DEFAULT_BLUEPRINT_ID = 600
+# Permanent sticker blueprint ID
+DEFAULT_BLUEPRINT_ID = 1268
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
@@ -191,33 +191,42 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
     return image_id
 
 
-def discover_print_provider_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
-    pp_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
-    log("PRINTIFY_DISCOVERY", f"Fetching supported print providers: {pp_url}")
+def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
+    """
+    Dynamically discovers a valid print provider supporting the blueprint 
+    and fetches matching operational variants/base costs without hardcoding IDs.
+    """
+    providers_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
+    log("PRINTIFY_DISCOVERY", f"Querying supported print providers for blueprint {blueprint_id}...")
+    
     try:
-        resp = requests.get(pp_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
+        resp = requests.get(providers_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         providers = resp.json()
+        
         if not providers:
-            log("PRINTIFY_DISCOVERY", "ERROR: No print providers found for blueprint.")
+            log("PRINTIFY_DISCOVERY", f"ERROR: No print providers available for blueprint ID {blueprint_id}.")
             sys.exit(1)
         
+        # Select the first available active print provider supporting this item
         print_provider_id = providers[0].get("id")
         log("PRINTIFY_DISCOVERY", f"Discovered valid print_provider_id={print_provider_id}")
+        
     except Exception as exc:
-        log("PRINTIFY_DISCOVERY", f"ERROR: Failed to fetch print providers: {exc}")
+        log("PRINTIFY_DISCOVERY", f"ERROR: Failed to query print providers: {exc}")
         sys.exit(1)
 
-    v_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
-    log("PRINTIFY_VARIANTS", f"Fetching valid variants from catalog: {v_url}")
+    variants_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
+    log("PRINTIFY_VARIANTS", f"Fetching variant schema from catalog endpoint...")
+    
     try:
-        resp = requests.get(v_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
+        resp = requests.get(variants_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         variants_list = data.get("variants", [])
         
         if not variants_list:
-            log("PRINTIFY_VARIANTS", "ERROR: No variants found in catalog response.")
+            log("PRINTIFY_VARIANTS", "ERROR: Catalog response contained zero variants.")
             sys.exit(1)
 
         available_ids = [v.get("id") for v in variants_list if v.get("id")]
@@ -229,14 +238,15 @@ def discover_print_provider_and_variants(api_key: str, blueprint_id: int, reques
                 avg_cost = int(sum(costs) / len(costs)) if costs else 1000
                 return print_provider_id, valid_requested, avg_cost
 
+        # Fallback to the first available operational variant
         first_variant = variants_list[0]
         chosen_id = first_variant.get("id")
         chosen_cost = first_variant.get("cost", 1000)
-        log("PRINTIFY_VARIANTS", f"Auto-selected valid variant ID: {chosen_id} with cost {chosen_cost} cents.")
+        log("PRINTIFY_VARIANTS", f"Auto-selected operational variant ID: {chosen_id} (Base Cost: {chosen_cost} cents)")
         return print_provider_id, [chosen_id], chosen_cost
 
     except Exception as exc:
-        log("PRINTIFY_VARIANTS", f"ERROR: Failed to fetch blueprint variants: {exc}")
+        log("PRINTIFY_VARIANTS", f"ERROR: Failed to retrieve variant catalog: {exc}")
         sys.exit(1)
 
 
@@ -244,14 +254,14 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
                     blueprint_id: int, user_variant_ids: list) -> str:
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
 
-    print_provider_id, variant_ids, base_cost_cents = discover_print_provider_and_variants(
+    print_provider_id, variant_ids, base_cost_cents = resolve_blueprint_and_variants(
         api_key, blueprint_id, user_variant_ids
     )
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
     tags = [keyword.lower()] + EVERGREEN_TAGS
     title = f"{keyword.title()} - Minimalist Vector Sticker [DRY-RUN]"
-    description = f"Backtest item for keyword: {keyword}."
+    description = f"Autonomous backtest item generated for keyword: {keyword}."
 
     payload = {
         "title": title,
@@ -269,20 +279,20 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
         }],
     }
 
-    log("PRINTIFY_PRODUCT", f"Creating product listing at: {url}")
+    log("PRINTIFY_PRODUCT", f"Submitting product payload to shop endpoint: {url}")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
-        log("PRINTIFY_PRODUCT", f"ERROR: Product creation failed [{resp.status_code}]: {resp.text[:800]}")
+        log("PRINTIFY_PRODUCT", f"ERROR: Product creation rejected [{resp.status_code}]: {resp.text[:800]}")
         sys.exit(1)
 
     product_id = resp.json().get("id")
-    log("PRINTIFY_PRODUCT", f"Product successfully generated. product_id={product_id}")
+    log("PRINTIFY_PRODUCT", f"Product successfully registered. product_id={product_id}")
     return product_id
 
 
 def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
     if DRY_RUN:
-        log("PRINTIFY_PUBLISH", "DRY_RUN is enabled. Skipping public marketplace publish step safely.")
+        log("PRINTIFY_PUBLISH", "DRY_RUN is active. Skipping public marketplace synchronization safely.")
         return
 
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products/{product_id}/publish.json"
@@ -293,7 +303,7 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
     if resp.status_code not in (200, 201):
         log("PRINTIFY_PUBLISH", f"ERROR: Publish failed [{resp.status_code}]: {resp.text[:500]}")
         sys.exit(1)
-    log("PRINTIFY_PUBLISH", f"Product {product_id} published successfully.")
+    log("PRINTIFY_PUBLISH", f"Product {product_id} successfully published.")
 
 
 # -----------------------------------------------------------------
@@ -318,7 +328,7 @@ def main() -> None:
     )
     publish_product(printify_api_key, shop_id, product_id)
 
-    log("PIPELINE", f"=== Backtest complete successfully. Keyword='{keyword}', product_id={product_id} ===")
+    log("PIPELINE", f"=== Backtest completed successfully. Keyword='{keyword}', product_id={product_id} ===")
 
 
 if __name__ == "__main__":
