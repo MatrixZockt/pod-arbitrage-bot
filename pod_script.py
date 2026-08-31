@@ -1,15 +1,15 @@
-#!/usr/init/env python3
+#!/usr/bin/env python3
 """
-pod_script.py
+pod_canvas_pipeline.py
 =================================================================
-Autonomous, zero-cost Print-on-Demand (POD) arbitrage pipeline.
+High-Margin Automated POD Pipeline (Canvas Wall Art Edition).
 
 Pipeline stages:
-    1. Zero-token trend ingestion & sanitization
-    2. High-converting die-cut vector prompt construction
-    3. Keyless image generation via Pollinations.ai API with retry logic
-    4. Printify API v1 integration: dynamic provider discovery & product creation
-    5. Verbose, timestamped logging at every step
+    1. Sentiment & Decor Trend Ingestion (Home & Living focus)
+    2. High-Resolution Minimalist Vector / Line-Art Prompt Mapping
+    3. Keyless High-Res Image Generation via Pollinations.ai API
+    4. Printify API v1 Integration: Stretched Gallery Canvas Blueprint (#383)
+    5. Automatic High-AOV Retail Calculation & Multi-Variant Payload Generation
 =================================================================
 """
 
@@ -31,35 +31,36 @@ import requests
 # -----------------------------------------------------------------
 
 GOOGLE_TRENDS_RSS_URL = "https://trends.google.com/trending/rss?geo=US"
-REDDIT_FALLBACK_URL = "https://www.reddit.com/r/popular/top.json?limit=10&t=day"
+REDDIT_FALLBACK_URL = "https://www.reddit.com/r/CozyPlaces/top.json?limit=10&t=day"
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
-# Optimized for high-converting e-commerce: isolated sticker with a clear contour border
+# Optimized for high-end home decor canvas prints (clean lines, safe framing layout)
 PROMPT_TEMPLATE = (
-    "die-cut vinyl sticker of {keyword}, "
-    "isolated object, thick solid white border contour outline around the entire shape, "
-    "flat vector graphic style, vibrant pop culture colors, "
-    "clean vector lines, pure solid white background, zero artifacts, high contrast"
+    "minimalist botanical line art and abstract watercolor elements representing {keyword}, "
+    "nordic interior design style, elegant neutral color palette, "
+    "high-end gallery wall art aesthetic, clean composition, "
+    "isolated on a solid warm off-white background, high resolution, sharp focus"
 )
 
-EVERGREEN_TAGS = [
-    "sticker",
-    "laptop decal",
-    "trendy design",
-    "aesthetic sticker",
-    "vinyl sticker",
-    "cute sticker",
+DECOR_TAGS = [
+    "wall art",
+    "home decor",
+    "canvas print",
+    "minimalist aesthetic",
+    "interior styling",
+    "gift for home",
 ]
 
-DEFAULT_BLUEPRINT_ID = 600  # Die-Cut Vinyl Stickers
+DEFAULT_BLUEPRINT_ID = 383  # Stretched Canvas, Multiple Sizes
 
 variant_env = os.environ.get("PRINTIFY_VARIANT_IDS")
 DEFAULT_VARIANT_IDS = [
     int(v) for v in variant_env.split(",")
 ] if variant_env and variant_env.strip() else []
 
+# High-margin baseline: targeting 100%+ markup to ensure $25+ net profit per unit
 margin_env = os.environ.get("INTRO_MARGIN_PERCENT")
-INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 25.0  # Optimized margin for profit scaling
+INTRO_MARGIN_PERCENT = float(margin_env) if margin_env and margin_env.strip() else 120.0
 
 REQUEST_TIMEOUT = 30
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
@@ -83,7 +84,7 @@ def get_required_env(var_name: str) -> str:
 
 
 # -----------------------------------------------------------------
-# STAGE 1: TREND INGESTION & SANITIZATION
+# STAGE 1: TREND & DECOR CONCEPT INGESTION
 # -----------------------------------------------------------------
 
 def sanitize_keyword(raw_keyword: str) -> str:
@@ -92,64 +93,52 @@ def sanitize_keyword(raw_keyword: str) -> str:
     return clean.lower()
 
 
-def fetch_trending_keyword() -> str:
-    log("TREND", f"Fetching Google Trends RSS: {GOOGLE_TRENDS_RSS_URL}")
+def fetch_decor_concept() -> str:
+    log("TREND", f"Fetching interior styling trends from Reddit CozyPlaces/Lifestyle feeds...")
     try:
-        feed = feedparser.parse(GOOGLE_TRENDS_RSS_URL)
-        if feed.entries:
-            candidates = [entry.title.strip() for entry in feed.entries if entry.get("title")]
-            if candidates:
-                raw_keyword = random.choice(candidates[: min(5, len(candidates))])
-                keyword = sanitize_keyword(raw_keyword)
-                log("TREND", f"Google Trends selected keyword: '{keyword}' (raw: '{raw_keyword}')")
-                return keyword
-    except Exception as exc:
-        log("TREND", f"Google Trends RSS fetch failed: {exc}. Falling back to Reddit.")
-
-    try:
-        headers = {"User-Agent": "pod-arbitrage-bot/1.0"}
-        log("TREND", f"Fetching Reddit fallback: {REDDIT_FALLBACK_URL}")
+        headers = {"User-Agent": "pod-canvas-bot/1.0"}
         resp = requests.get(REDDIT_FALLBACK_URL, headers=headers, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         posts = data.get("data", {}).get("children", [])
         titles = [p["data"]["title"].strip() for p in posts if p.get("data", {}).get("title")]
-        raw_keyword = random.choice(titles[: min(5, len(titles))])
-        raw_keyword = " ".join(raw_keyword.split()[:4])
-        keyword = sanitize_keyword(raw_keyword)
-        log("TREND", f"Reddit fallback selected keyword: '{keyword}'")
-        return keyword
+        if titles:
+            raw_keyword = random.choice(titles[: min(5, len(titles))])
+            raw_keyword = " ".join(raw_keyword.split()[:3])  # Keep core subject clean
+            keyword = sanitize_keyword(raw_keyword)
+            log("TREND", f"Selected high-intent decor concept: '{keyword}'")
+            return keyword
     except Exception as exc:
-        log("TREND", f"ERROR: Trend ingestion failed: {exc}")
-        sys.exit(1)
+        log("TREND", f"Community feed fallback failed: {exc}. Using evergreen aesthetic default.")
+    
+    fallback = random.choice(["serene mountain landscape", "botanical eucalyptus branch", "abstract coastal horizon", "mid century geometric warmth"])
+    log("TREND", f"Using curated evergreen decor concept: '{fallback}'")
+    return fallback
 
 
 # -----------------------------------------------------------------
-# STAGE 2: PROMPT MAPPING
+# STAGE 2 & 3: HIGH-RES GENERATION
 # -----------------------------------------------------------------
 
 def build_prompt(keyword: str) -> str:
     prompt = PROMPT_TEMPLATE.format(keyword=keyword)
-    log("PROMPT", f"Constructed commercial sticker prompt: {prompt}")
+    log("PROMPT", f"Constructed fine-art canvas prompt: {prompt}")
     return prompt
 
 
-# -----------------------------------------------------------------
-# STAGE 3: IMAGE GENERATION
-# -----------------------------------------------------------------
-
-def generate_image(prompt: str) -> bytes:
+def generate_canvas_image(prompt: str) -> bytes:
     encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+    # Requesting a wider 4:3 canvas aspect ratio resolution suitable for wall art
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=900&nologo=true"
     
-    log("IMAGE_GEN", f"Requesting image generation from Pollinations.ai endpoint...")
+    log("IMAGE_GEN", f"Requesting high-resolution canvas render from Pollinations.ai...")
 
     max_retries = 3
     for attempt in range(1, max_retries + 1):
         try:
-            resp = requests.get(url, timeout=60)
-            if resp.status_code == 200 and len(resp.content) > 1000:
-                log("IMAGE_GEN", f"Image generated successfully ({len(resp.content)} bytes).")
+            resp = requests.get(url, timeout=90)
+            if resp.status_code == 200 and len(resp.content) > 2000:
+                log("IMAGE_GEN", f"Canvas artwork rendered successfully ({len(resp.content)} bytes).")
                 return resp.content
             else:
                 log("IMAGE_GEN", f"Attempt {attempt} received status {resp.status_code}. Retrying...")
@@ -159,12 +148,12 @@ def generate_image(prompt: str) -> bytes:
         if attempt < max_retries:
             time.sleep(10)
 
-    log("IMAGE_GEN", "ERROR: Image generation failed after all retry attempts.")
+    log("IMAGE_GEN", "ERROR: Canvas image generation failed after all retry attempts.")
     sys.exit(1)
 
 
 # -----------------------------------------------------------------
-# STAGE 4: PRINTIFY INTEGRATION
+# STAGE 4 & 5: PRINTIFY API INTEGRATION (CANVAS BLUEPRINT)
 # -----------------------------------------------------------------
 
 def printify_headers(api_key: str) -> dict:
@@ -182,7 +171,7 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
         "contents": b64_contents,
     }
 
-    log("PRINTIFY_UPLOAD", f"Uploading image to Printify: {url}")
+    log("PRINTIFY_UPLOAD", f"Uploading high-res canvas art asset to Printify: {url}")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
         log("PRINTIFY_UPLOAD", f"ERROR: Upload failed [{resp.status_code}]: {resp.text[:500]}")
@@ -195,7 +184,7 @@ def upload_image_to_printify(api_key: str, image_bytes: bytes, file_name: str) -
 
 def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_ids: list) -> tuple:
     providers_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers.json"
-    log("PRINTIFY_DISCOVERY", f"Querying supported print providers for blueprint {blueprint_id}...")
+    log("PRINTIFY_DISCOVERY", f"Querying verified print providers for canvas blueprint {blueprint_id}...")
     
     try:
         resp = requests.get(providers_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
@@ -203,18 +192,18 @@ def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_id
         providers = resp.json()
         
         if not providers:
-            log("PRINTIFY_DISCOVERY", f"ERROR: No print providers available for blueprint ID {blueprint_id}.")
+            log("PRINTIFY_DISCOVERY", f"ERROR: No print providers available for canvas blueprint ID {blueprint_id}.")
             sys.exit(1)
         
         print_provider_id = providers[0].get("id")
-        log("PRINTIFY_DISCOVERY", f"Discovered valid print_provider_id={print_provider_id}")
+        log("PRINTIFY_DISCOVERY", f"Discovered optimal print_provider_id={print_provider_id}")
         
     except Exception as exc:
         log("PRINTIFY_DISCOVERY", f"ERROR: Failed to query print providers: {exc}")
         sys.exit(1)
 
     variants_url = f"{PRINTIFY_BASE_URL}/catalog/blueprints/{blueprint_id}/print_providers/{print_provider_id}/variants.json"
-    log("PRINTIFY_VARIANTS", f"Fetching variant schema from catalog endpoint...")
+    log("PRINTIFY_VARIANTS", f"Fetching premium canvas variant schema...")
     
     try:
         resp = requests.get(variants_url, headers=printify_headers(api_key), timeout=REQUEST_TIMEOUT)
@@ -223,7 +212,7 @@ def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_id
         variants_list = data.get("variants", [])
         
         if not variants_list:
-            log("PRINTIFY_VARIANTS", "ERROR: Catalog response contained zero variants.")
+            log("PRINTIFY_VARIANTS", "ERROR: Canvas catalog response contained zero variants.")
             sys.exit(1)
 
         available_ids = [v.get("id") for v in variants_list if v.get("id")]
@@ -231,33 +220,41 @@ def resolve_blueprint_and_variants(api_key: str, blueprint_id: int, requested_id
         if requested_ids:
             valid_requested = [vid for vid in requested_ids if vid in available_ids]
             if valid_requested:
-                costs = [v.get("cost", 1000) for v in variants_list if v.get("id") in valid_requested]
-                avg_cost = int(sum(costs) / len(costs)) if costs else 1000
+                costs = [v.get("cost", 2000) for v in variants_list if v.get("id") in valid_requested]
+                avg_cost = int(sum(costs) / len(costs)) if costs else 2000
                 return print_provider_id, valid_requested, avg_cost
 
-        first_variant = variants_list[0]
-        chosen_id = first_variant.get("id")
-        chosen_cost = first_variant.get("cost", 1000)
-        log("PRINTIFY_VARIANTS", f"Auto-selected operational variant ID: {chosen_id} (Base Cost: {chosen_cost} cents)")
-        return print_provider_id, [chosen_id], chosen_cost
+        # Default to up to 2 standard wall sizes if none specified
+        chosen_variants = variants_list[:2] if len(variants_list) >= 2 else variants_list
+        chosen_ids = [v.get("id") for v in chosen_variants]
+        costs = [v.get("cost", 2000) for v in chosen_variants]
+        avg_cost = int(sum(costs) / len(costs)) if costs else 2000
+        
+        log("PRINTIFY_VARIANTS", f"Auto-selected high-AOV canvas variant IDs: {chosen_ids} (Avg Base Cost: {avg_cost} cents)")
+        return print_provider_id, chosen_ids, avg_cost
 
     except Exception as exc:
         log("PRINTIFY_VARIANTS", f"ERROR: Failed to retrieve variant catalog: {exc}")
         sys.exit(1)
 
 
-def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
-                    blueprint_id: int, user_variant_ids: list) -> str:
+def create_canvas_product(api_key: str, shop_id: str, image_id: str, keyword: str,
+                           blueprint_id: int, user_variant_ids: list) -> str:
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
 
     print_provider_id, variant_ids, base_cost_cents = resolve_blueprint_and_variants(
         api_key, blueprint_id, user_variant_ids
     )
+    # High-AOV pricing calculation
     retail_price_cents = int(round(base_cost_cents * (1 + INTRO_MARGIN_PERCENT / 100)))
 
-    tags = [keyword] + EVERGREEN_TAGS
-    title = f"{keyword.title()} Die-Cut Vinyl Sticker"
-    description = f"High-quality die-cut vinyl sticker featuring an exclusive {keyword} vector design. Durable, weather-resistant, and perfect for laptops, water bottles, and notebooks."
+    tags = [keyword] + DECOR_TAGS
+    title = f"{keyword.title()} Premium Gallery Wrapped Canvas"
+    description = (
+        f"Transform your space with this museum-quality gallery wrapped canvas featuring an "
+        f"exclusive minimalist interpretation of {keyword}. Printed with fade-resistant UV inks "
+        f"on durable poly-cotton blend canvas, stretched professionally over kiln-dried pine wood frames."
+    )
 
     payload = {
         "title": title,
@@ -270,36 +267,36 @@ def create_product(api_key: str, shop_id: str, image_id: str, keyword: str,
             "variant_ids": variant_ids,
             "placeholders": [{
                 "position": "front",
-                "images": [{"id": image_id, "x": 0.5, "y": 0.5, "scale": 0.85, "angle": 0}]
+                "images": [{"id": image_id, "x": 0.5, "y": 0.5, "scale": 1.0, "angle": 0}]
             }]
         }],
     }
 
-    log("PRINTIFY_PRODUCT", f"Submitting product payload to shop endpoint: {url}")
+    log("PRINTIFY_PRODUCT", f"Submitting high-margin canvas payload to shop endpoint: {url}")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
-        log("PRINTIFY_PRODUCT", f"ERROR: Product creation rejected [{resp.status_code}]: {resp.text[:800]}")
+        log("PRINTIFY_PRODUCT", f"ERROR: Canvas creation rejected [{resp.status_code}]: {resp.text[:800]}")
         sys.exit(1)
 
     product_id = resp.json().get("id")
-    log("PRINTIFY_PRODUCT", f"Product successfully registered. product_id={product_id}")
+    log("PRINTIFY_PRODUCT", f"High-AOV canvas product successfully registered. product_id={product_id}")
     return product_id
 
 
 def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
     if DRY_RUN:
-        log("PRINTIFY_PUBLISH", "DRY_RUN is active. Skipping public marketplace synchronization safely.")
+        log("PRINTIFY_PUBLISH", "DRY_RUN is active. Skipping marketplace synchronization safely.")
         return
 
     url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products/{product_id}/publish.json"
     payload = {"title": True, "description": True, "images": True, "variants": True, "tags": True}
 
-    log("PRINTIFY_PUBLISH", f"Publishing product {product_id} at: {url}")
+    log("PRINTIFY_PUBLISH", f"Publishing high-margin canvas {product_id} at: {url}")
     resp = requests.post(url, headers=printify_headers(api_key), json=payload, timeout=REQUEST_TIMEOUT)
     if resp.status_code not in (200, 201):
         log("PRINTIFY_PUBLISH", f"ERROR: Publish failed [{resp.status_code}]: {resp.text[:500]}")
         sys.exit(1)
-    log("PRINTIFY_PUBLISH", f"Product {product_id} successfully published.")
+    log("PRINTIFY_PUBLISH", f"Canvas product {product_id} successfully published.")
 
 
 # -----------------------------------------------------------------
@@ -307,24 +304,24 @@ def publish_product(api_key: str, shop_id: str, product_id: str) -> None:
 # -----------------------------------------------------------------
 
 def main() -> None:
-    log("PIPELINE", f"=== Starting POD backtest run (DRY_RUN={DRY_RUN}) ===")
+    log("PIPELINE", f"=== Starting High-Margin Canvas Pipeline Execution (DRY_RUN={DRY_RUN}) ===")
 
     printify_api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
 
-    keyword = fetch_trending_keyword()
+    keyword = fetch_decor_concept()
     prompt = build_prompt(keyword)
-    image_bytes = generate_image(prompt)
-    file_name = f"{keyword.replace(' ', '_')}_{int(time.time())}.png"
+    image_bytes = generate_canvas_image(prompt)
+    file_name = f"canvas_{keyword.replace(' ', '_')}_{int(time.time())}.png"
 
     image_id = upload_image_to_printify(printify_api_key, image_bytes, file_name)
-    product_id = create_product(
+    product_id = create_canvas_product(
         printify_api_key, shop_id, image_id, keyword,
         DEFAULT_BLUEPRINT_ID, DEFAULT_VARIANT_IDS
     )
     publish_product(printify_api_key, shop_id, product_id)
 
-    log("PIPELINE", f"=== Backtest completed successfully. Keyword='{keyword}', product_id={product_id} ===")
+    log("PIPELINE", f"=== High-Margin Pipeline Execution Completed. Concept='{keyword}', product_id={product_id} ===")
 
 
 if __name__ == "__main__":
