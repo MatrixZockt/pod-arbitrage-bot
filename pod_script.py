@@ -20,17 +20,18 @@ import requests
 
 PRINTIFY_BASE_URL = "https://api.printify.com/v1"
 
+# Updated with viral 2026 interior trends to maximize buyer intent
 FALLBACK_CONCEPTS = [
-    "botanical eucalyptus branch",
-    "serene alpine mountain ridge",
-    "abstract minimalist coastal horizon",
-    "mid-century geometric sun and arch",
-    "line art botanical wild fern"
+    "organic modern terracotta arch and minimalist line art",
+    "moody moss green botanical abstract forms",
+    "warm sand and clay textured contemporary minimalism",
+    "japonandi style minimalist minimalist branch and circle",
+    "soft neutral bauhaus geometric shapes and warm beige tones"
 ]
 
 PROMPT_TEMPLATE = (
-    "minimalist abstract line art and organic shapes representing {keyword}, "
-    "modern contemporary fine art print, elegant neutral color palette, "
+    "{keyword}, modern contemporary fine art print, "
+    "organic modern aesthetic, warm earth tones, tactile feel, "
     "clean composition, full bleed graphic, high resolution, sharp focus"
 )
 
