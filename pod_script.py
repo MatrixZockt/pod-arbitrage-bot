@@ -7,7 +7,7 @@ Autonomous, zero-cost Print-on-Demand (POD) arbitrage pipeline.
 Pipeline stages:
     1. Zero-token trend ingestion (Google Trends RSS -> Reddit JSON fallback)
     2. Deterministic prompt construction (hardcoded template, no LLM tokens)
-    3. Image generation via a configurable image-gen API
+    3. Keyless image generation via Pollinations.ai API with retry logic
     4. Printify API v1 integration: upload image -> create product -> (optional publish)
     5. Verbose, timestamped logging at every step
 =================================================================
@@ -20,6 +20,7 @@ import os
 import random
 import sys
 import time
+import urllib.parse
 
 import feedparser
 import requests
@@ -48,7 +49,7 @@ EVERGREEN_TAGS = [
     "cute sticker",
 ]
 
-# Safe environment variable parsing with defaults to prevent empty-string crashes
+# Safe environment variable parsing with defaults
 def _get_env_int(var_name: str, default: int) -> int:
     val = os.environ.get(var_name)
     return int(val) if val and val.strip() else default
@@ -137,34 +138,36 @@ def build_prompt(keyword: str) -> str:
 
 
 # -----------------------------------------------------------------
-# STAGE 3: IMAGE GENERATION
+# STAGE 3: IMAGE GENERATION (POLLINATIONS.AI)
 # -----------------------------------------------------------------
 
-def generate_image(prompt: str, image_gen_api_key: str) -> bytes:
-    url = "https://api.stability.ai/v2beta/stable-image/generate/core"
-    headers = {
-        "Authorization": f"Bearer {image_gen_api_key}",
-        "Accept": "image/*",
-    }
-    files = {"none": ""}
-    data = {
-        "prompt": prompt,
-        "output_format": "png",
-        "aspect_ratio": "1:1",
-    }
+def generate_image(prompt: str) -> bytes:
+    """
+    Generate image bytes via Pollinations.ai with built-in retry logic 
+    to handle shared server traffic cleanly. Requires no API keys.
+    """
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+    
+    log("IMAGE_GEN", f"Requesting image generation from Pollinations.ai endpoint...")
 
-    log("IMAGE_GEN", f"Requesting image generation from: {url}")
-    try:
-        resp = requests.post(url, headers=headers, files=files, data=data, timeout=60)
-        resp.raise_for_status()
-        image_bytes = resp.content
-        log("IMAGE_GEN", f"Image generated successfully ({len(image_bytes)} bytes).")
-        return image_bytes
-    except Exception as exc:
-        log("IMAGE_GEN", f"ERROR: Image generation failed: {exc}")
-        if 'resp' in locals():
-            log("IMAGE_GEN", f"Response: {resp.text[:500]}")
-        sys.exit(1)
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(url, timeout=60)
+            if resp.status_code == 200 and len(resp.content) > 1000:
+                log("IMAGE_GEN", f"Image generated successfully ({len(resp.content)} bytes).")
+                return resp.content
+            else:
+                log("IMAGE_GEN", f"Attempt {attempt} received status {resp.status_code}. Retrying...")
+        except Exception as exc:
+            log("IMAGE_GEN", f"Attempt {attempt} failed with error: {exc}. Retrying...")
+        
+        if attempt < max_retries:
+            time.sleep(10)
+
+    log("IMAGE_GEN", "ERROR: Image generation failed after all retry attempts.")
+    sys.exit(1)
 
 
 # -----------------------------------------------------------------
@@ -280,11 +283,11 @@ def main() -> None:
 
     printify_api_key = get_required_env("PRINTIFY_API_KEY")
     shop_id = get_required_env("STORE_ID")
-    image_gen_api_key = get_required_env("IMAGE_GEN_API_KEY")
+    # Note: IMAGE_GEN_API_KEY is no longer required since Pollinations is keyless!
 
     keyword = fetch_trending_keyword()
     prompt = build_prompt(keyword)
-    image_bytes = generate_image(prompt, image_gen_api_key)
+    image_bytes = generate_image(prompt)
     file_name = f"{keyword.lower().replace(' ', '_')}_{int(time.time())}.png"
 
     image_id = upload_image_to_printify(printify_api_key, image_bytes, file_name)
